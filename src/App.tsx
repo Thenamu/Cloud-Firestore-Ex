@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // import { collection, addDoc, DocumentReference, doc, setDoc } from "firebase/firestore";
 import {
   collection, // Firestore의 특정 컬렉션에 대한 참조를 생성하는 함수
@@ -13,6 +13,7 @@ import {
   onSnapshot, // Firestore의 쿼리 또는 컬렉션에 실시간 리스너를 추가하는 함수, 실시간 문서 변경 감지
 } from "firebase/firestore";
 import { db } from "./firebase.ts"; // Firebase 설정 파일에서 Firestore 데이터베이스 인스턴스를 가져옴
+import { getStorage, ref, uploadBytes, deleteObject, StorageReference } from "firebase/storage";
 
 function App() {
 
@@ -21,7 +22,7 @@ function App() {
     name: string;
     gender: string;
   }
-
+  
   /**
    * useState를 사용하여 상태 변수들을 선언
    */
@@ -32,6 +33,27 @@ function App() {
   // users 상태 변수와 setUsers 상태 업데이트 함수를 선언, 초기 값은 빈 배열
   // users는 User 타입의 객체들로 이루어진 배열 타입
   const [users, setUsers] = useState<User[]>([]);
+  // const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const stroage = getStorage();
+  const imgStorage = ref(stroage, "images");
+  const docStorage = ref(stroage, "documents");
+
+  const handleButtonClick = () => {
+    // fileInputRef.current를 사용하여 <input type="file" ref={fileInputRef} style={{ display: 'none' }}/> DOM 요소에 접근
+    // 옵셔널 체이닝을 통해 null 또는 undefined를 처리
+    // current가 존재할 때만 .click() 메서드 호출
+    // fileInputRef.current?가 null 또는 undefined면 동작하지 않고 에러 없이 넘어감
+    fileInputRef.current?.click();
+
+
+    // (fileInputRef.current as HTMLInputElement).click();
+    // if(fileInputRef.current) {
+    //   fileInputRef.current.click();
+    // }
+  };
+
 
   /**
    * 이름 입력 필드에 값이 변경될 때 호출되는 함수
@@ -260,6 +282,69 @@ function App() {
 
   // }
 
+  /**
+   * 파일 업로드 수행 메소드
+   * 
+   * @param storageRef 
+   * @param file 
+   */
+  const fileChange = (storageRef: StorageReference, file: File) => {
+    // uploadBytes().then().catch();
+    // 인자로 받은 저장소 참조 객체와 현재 파일을 사용하여 파일 업로드
+    uploadBytes(storageRef, file)
+    .then(() => {
+      // 성공 시 콘솔에 메시지와 파일 이름 출력
+      console.log("Uploaded a blob or file!", file.name);
+    }).catch((e) => {
+      // 실패 시 콘솔에 에러 메시지 출력
+      console.error("Upload failed", e);
+    });
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    // e.target.files로 선택된 파일의 목록을 가져옴 <input type="file"/> 속성
+    const files = e.target.files;
+    
+    // 선택된 파일이 없거나 파일 목록의 길이가 0이면 메소드 종료
+    if(!files || files.length === 0) {
+      return;
+    } else {
+      // 선택된 파일 목록을 반복하며 각 파일 처리
+      for(let i = 0; i < files.length; i++) {
+        // 파일 목록은 배열, 현재 인텍스의 파일을 가져옴
+        const file = files[i];
+        // 가져온 파일의 이름에서 확장자를 추출해서 소문자로 변환, name 속성은 JavaScript File 객체의 속성
+        const fileExtension = file.name.split(".").pop()?.toLowerCase();
+        // 확장자 콘솔에 출력
+        console.log(fileExtension);
+
+        // 확장자가 존재하면 true, null이거나 undefined면 false 
+        if(fileExtension) {
+          // 하위 폴더의 참조 객체를 담을 변수 선언
+          let storageRef;
+
+          // 확장자가 이미지 파일 유형일 경우
+          // Array.prototype.includes(): 배열이 해당 요소를 포함하고 있으면 true, 그렇지 않으면 false
+          if(['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+            // 이미지 저장소에 대한 참조 객체 생성  
+            storageRef = ref(imgStorage, file.name);
+            // 확장자가 문서 파일 유형일 경우
+          } else if(['pdf', 'doc', 'docx', 'xlsx', 'pptx'].includes(fileExtension)) {
+            // 문서 저장소에 대한 참조 객체 생성
+            storageRef = ref(docStorage, file.name);
+          } else {
+            // 파일 확장자가 위에서 지정한 이미지나 문서 형식이 아닌 경우 콘솔에 확장자를 출력하고
+            console.log(`Unsupported file type: ${fileExtension}`);
+            // 현재 파일 처리를 중단하고 for문으로 되돌아가 다음 파일 처리 진행
+            continue;
+          }
+
+          fileChange(storageRef, file); // 저장소 참조 객체와 현재 파일로 실제 업로드 메소드 수행 
+        }
+      }
+    }
+  }
+
   return (
     <>
       <div>
@@ -300,6 +385,15 @@ function App() {
           ))}
         </ul>
       </div>
+      <div>
+        <button onClick={handleButtonClick}>파일 선택드궤제~</button>
+        <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        style={{ display: 'none' }}/>
+        </div>
     </>
   );
 }
